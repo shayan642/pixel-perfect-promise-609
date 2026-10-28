@@ -1,203 +1,329 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
-import { ChevronRight, FileText, Calculator, LineChart, ShieldCheck, Leaf } from "lucide-react";
+import { FileText } from "lucide-react";
 import {
-  Bar, BarChart, CartesianGrid, Line, LineChart as RLineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart as RLineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
-import { NumField, Panel, TX_IMG } from "@/components/gl/parts";
+import { AssumptionFields } from "@/components/gl/AssumptionFields";
+import {
+  CategoryArt,
+  CompareBar,
+  DetailsBlock,
+  PILLARS,
+  TypeGlyph,
+  journalTotals,
+  type PillarId,
+} from "@/components/gl/identity";
+import { Panel, StatusPill } from "@/components/gl/parts";
 import { DemoBadge } from "@/components/gl/Shell";
 import { useGL } from "@/lib/gl-store";
-import { TX_META, aed, calcBuilding, calcVehicle, type TxId } from "@/lib/greenledger";
-import { buildingView, vehicleView, type View } from "@/lib/gl-content";
+import {
+  CATEGORY_LABEL,
+  TYPE_LABEL,
+  aed,
+  calcEfficiency,
+  calcPpe,
+  formatDisplayDate,
+  type Transaction,
+} from "@/lib/greenledger";
+import { transactionView, type View } from "@/lib/gl-content";
+import { OccupationsTable } from "@/components/gl/OccupationsTable";
+import { EsgGauge } from "@/components/gl/EsgGauge";
+import { occupationSupplyDemand, WORKFORCE_DISCLOSURE } from "@/lib/workforce";
 
 export const Route = createFileRoute("/analysis/$txId")({
-  beforeLoad: ({ params }) => {
-    if (params.txId !== "vehicles" && params.txId !== "building") throw notFound();
-  },
-  head: ({ params }) => {
-    const t = params.txId === "building" ? TX_META.building.title : TX_META.vehicles.title;
-    return {
-      meta: [
-        { title: `${t} — Integrated Analysis | GreenLedger AI` },
-        { name: "description", content: `Accounting, financial, audit and climate analysis for ${t} (synthetic demo).` },
-        { property: "og:title", content: `${t} — Integrated Analysis` },
-        { property: "og:description", content: "One transaction. Four perspectives." },
-      ],
-    };
-  },
+  head: () => ({
+    meta: [
+      { title: `Integrated Analysis | MIZAN AI` },
+      { name: "description", content: `Accounting, financial, audit, sustainability and workforce analysis.` },
+    ],
+  }),
   component: Analysis,
 });
 
-const TABS = [
-  { id: "accounting", label: "Accounting", icon: Calculator },
-  { id: "financial", label: "Financial Impact", icon: LineChart },
-  { id: "audit", label: "Audit & Controls", icon: ShieldCheck },
-  { id: "sustainability", label: "Sustainability", icon: Leaf },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
-
 const tickAed = (n: number) => `${Math.round(n / 1000)}k`;
-const chartTip = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8 }, formatter: (v: number) => aed(v) };
+const chartTip = {
+  contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8 },
+  formatter: (v: number) => aed(v),
+  labelFormatter: (label: string | number) => `Year ${label}`,
+};
 
 function Analysis() {
-  const txId = Route.useParams().txId as TxId;
-  const { vehicle, building, setVehicle, setBuilding } = useGL();
-  const [tab, setTab] = useState<Tab>("accounting");
-  const view = txId === "vehicles" ? vehicleView(vehicle) : buildingView(building);
-  const m = TX_META[txId];
+  const txId = Route.useParams().txId;
+  const { transactions, updateTransaction } = useGL();
+  const tx = transactions.find((t) => t.id === txId);
+  const [tab, setTab] = useState<PillarId>("financial");
+  const [stage, setStage] = useState(0);
+  if (!tx) throw notFound();
+  const view = transactionView(tx);
+  const selected = PILLARS.find((p) => p.id === tab)!;
+  const activeStage = view.trace[stage] ?? view.trace[0];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        {(["vehicles", "building"] as const).map((id) => (
-          <Link key={id} to="/analysis/$txId" params={{ txId: id }}
-            className={`rounded-full border px-4 py-1.5 text-sm ${id === txId ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
-            {TX_META[id].short}
+    <div className="mx-auto max-w-7xl space-y-5">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {transactions.map((t) => (
+          <Link
+            key={t.id}
+            to="/analysis/$txId"
+            params={{ txId: t.id }}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors hover:border-gold/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              t.id === tx.id ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"
+            }`}
+          >
+            <TypeGlyph type={t.type} className="h-3.5 w-3.5" />
+            {t.short}
           </Link>
         ))}
       </div>
 
-      <section className="flex flex-col gap-5 overflow-hidden rounded-2xl border border-border bg-card md:flex-row">
-        <img src={TX_IMG[txId]} alt={m.title} width={1280} height={768} className="h-40 w-full object-cover md:h-auto md:w-72" />
-        <div className="flex flex-1 flex-col gap-3 p-6">
-          <div className="flex items-center gap-2"><span className="tnum text-xs text-muted-foreground">{m.ref}</span><DemoBadge /></div>
-          <h1 className="text-2xl font-bold">{m.title}</h1>
-          <p className="text-sm text-muted-foreground">{view.summary}</p>
-          <div className="mt-auto">
-            <Link to="/report/$txId" params={{ txId }} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
-              <FileText className="h-4 w-4" /> Generate Decision Report
-            </Link>
+      <section className="overflow-hidden rounded-2xl border border-border bg-card uae-pattern">
+        <div className="flex flex-col md:flex-row">
+          <CategoryArt category={tx.category} type={tx.type} className="h-36 w-full md:h-auto md:w-56" />
+          <div className="flex flex-1 flex-col gap-4 p-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="tnum text-xs text-muted-foreground">{tx.ref}</span>
+                <DemoBadge />
+                <StatusPill status={tx.status} />
+                <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {CATEGORY_LABEL[tx.category]}
+                </span>
+              </div>
+              <h1 className="font-display text-2xl font-bold lg:text-3xl">{tx.projectName}</h1>
+              <p className="text-sm text-muted-foreground">{tx.title}</p>
+              <p className="text-xs text-muted-foreground">
+                {tx.entity} · {formatDisplayDate(tx.isoDate)} · {TYPE_LABEL[tx.type]}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-start gap-3 lg:items-end">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Recorded envelope</p>
+                <p className="tnum text-3xl font-semibold text-gold">{aed(tx.amount)}</p>
+              </div>
+              <Link
+                to="/report/$txId"
+                params={{ txId: tx.id }}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <FileText className="h-4 w-4" /> Generate Decision Report
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
-      <Panel title="Connected trace">
-        <ol className="flex flex-wrap items-stretch gap-2">
+      <section className="rounded-2xl border border-border bg-card p-4">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">Investment lifecycle</p>
+        <div className="flex gap-0 overflow-x-auto">
           {view.trace.map((s, i) => (
-            <li key={s.step} className="flex items-center gap-2">
-              <div className="rounded-xl border border-border bg-secondary px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wider text-gold">{i + 1}. {s.step}</p>
-                <p className="tnum mt-0.5 text-xs">{s.detail}</p>
-              </div>
-              {i < view.trace.length - 1 && <ChevronRight className="h-4 w-4 shrink-0 text-primary" />}
-            </li>
+            <button
+              key={s.step}
+              type="button"
+              onClick={() => setStage(i)}
+              className={`relative min-w-[7.5rem] flex-1 border px-3 py-3 text-left transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                i === stage ? "border-primary bg-primary/10" : "border-border"
+              } ${i === 0 ? "rounded-l-xl" : ""} ${i === view.trace.length - 1 ? "rounded-r-xl" : "border-r-0"}`}
+            >
+              <p className="tnum text-[10px] uppercase tracking-wider text-gold">
+                {i + 1}. {s.step}
+              </p>
+              <p className="tnum mt-1 line-clamp-2 text-xs text-foreground">{s.detail}</p>
+            </button>
           ))}
-        </ol>
-      </Panel>
-
-      <Integrated view={view} />
-
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-        <Panel title="Assumptions" className="h-fit lg:sticky lg:top-6">
-          <div className="space-y-3">
-            {txId === "vehicles" ? (
-              <>
-                <NumField label="Purchase cost" suffix="AED" step={10000} value={vehicle.purchaseCost} onChange={(n) => setVehicle({ ...vehicle, purchaseCost: n })} />
-                <NumField label="Number of vehicles" value={vehicle.vehicles} onChange={(n) => setVehicle({ ...vehicle, vehicles: n })} />
-                <NumField label="Useful life" suffix="years" value={vehicle.usefulLife} onChange={(n) => setVehicle({ ...vehicle, usefulLife: n })} />
-                <NumField label="Residual value" suffix="AED" step={10000} value={vehicle.residualValue} onChange={(n) => setVehicle({ ...vehicle, residualValue: n })} />
-                <NumField label="Annual maintenance" suffix="AED" step={5000} value={vehicle.annualMaintenance} onChange={(n) => setVehicle({ ...vehicle, annualMaintenance: n })} />
-                <NumField label="Annual fuel cost" suffix="AED" step={5000} value={vehicle.annualFuel} onChange={(n) => setVehicle({ ...vehicle, annualFuel: n })} />
-                <NumField label="Annual distance per vehicle" suffix="km" step={1000} value={vehicle.annualKmPerVehicle} onChange={(n) => setVehicle({ ...vehicle, annualKmPerVehicle: n })} />
-                <NumField label="Emissions factor (illustrative)" suffix="kgCO₂e/km" step={0.01} value={vehicle.emissionsFactorKgPerKm} onChange={(n) => setVehicle({ ...vehicle, emissionsFactorKgPerKm: n })} />
-              </>
-            ) : (
-              <>
-                <NumField label="Initial investment" suffix="AED" step={10000} value={building.investment} onChange={(n) => setBuilding({ ...building, investment: n })} />
-                <NumField label="Useful life" suffix="years" value={building.usefulLife} onChange={(n) => setBuilding({ ...building, usefulLife: n })} />
-                <NumField label="Annual energy-cost savings" suffix="AED" step={5000} value={building.annualSavings} onChange={(n) => setBuilding({ ...building, annualSavings: n })} />
-                <NumField label="Annual maintenance" suffix="AED" step={1000} value={building.annualMaintenance} onChange={(n) => setBuilding({ ...building, annualMaintenance: n })} />
-                <NumField label="Energy reduction" suffix="kWh/yr" step={10000} value={building.annualKwhReduction} onChange={(n) => setBuilding({ ...building, annualKwhReduction: n })} />
-                <NumField label="Grid emissions factor (illustrative)" suffix="kgCO₂e/kWh" step={0.01} value={building.emissionsFactorKgPerKwh} onChange={(n) => setBuilding({ ...building, emissionsFactorKgPerKwh: n })} />
-                <NumField label="Analysis horizon" suffix="years" value={building.horizonYears} onChange={(n) => setBuilding({ ...building, horizonYears: n })} />
-              </>
-            )}
-            <p className="pt-2 text-[11px] text-muted-foreground">Synthetic Demo Data. Changes update every perspective and the decision report.</p>
-          </div>
-        </Panel>
-
-        <div className="min-w-0 space-y-4">
-          <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-card p-1 sm:grid-cols-4">
-            {TABS.map((t) => (
-              <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm ${tab === t.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                <t.icon className="h-4 w-4" /> {t.label}
-              </button>
-            ))}
-          </div>
-          {tab === "accounting" && <AccountingTab view={view} />}
-          {tab === "financial" && <FinancialTab view={view} txId={txId} />}
-          {tab === "audit" && <AuditTab view={view} />}
-          {tab === "sustainability" && <SustainTab view={view} />}
         </div>
+        {activeStage && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{activeStage.step}: </span>
+            {activeStage.detail}
+          </p>
+        )}
+      </section>
+
+      <section>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">Five-pillar executive summary</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {PILLARS.map((p) => {
+            const finding =
+              p.id === "accounting"
+                ? view.integrated.accounting
+                : p.id === "financial"
+                  ? view.integrated.financial
+                  : p.id === "audit"
+                    ? view.integrated.audit
+                    : p.id === "sustainability"
+                      ? view.integrated.climate
+                      : (view.integrated.workforce ?? view.workforce?.headline ?? "Unavailable");
+            const metric = pillarMetric(p.id, view, tx);
+            const on = tab === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTab(p.id)}
+                className={`rounded-2xl border p-4 text-left transition-colors hover:border-gold/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  on ? "border-primary bg-primary/10" : "border-border bg-card"
+                }`}
+              >
+                <p className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider ${p.tone}`}>
+                  <p.icon className="h-4 w-4" />
+                  {p.label}
+                </p>
+                <p className="tnum mt-2 text-lg font-medium">{metric}</p>
+                <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">{finding}</p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className={`flex items-center gap-2 font-display text-lg font-semibold ${selected.tone}`}>
+              <selected.icon className="h-5 w-5" />
+              {selected.full}
+            </h2>
+          </div>
+          {tab === "accounting" && <AccountingTab view={view} tx={tx} />}
+          {tab === "financial" && <FinancialTab view={view} tx={tx} />}
+          {tab === "audit" && <AuditTab view={view} />}
+          {tab === "sustainability" && <SustainTab view={view} tx={tx} />}
+          {tab === "workforce" && <WorkforceTab view={view} />}
+        </div>
+        <Panel title="Live assumptions" className="h-fit lg:sticky lg:top-6">
+          <p className="mb-3 text-[11px] text-muted-foreground">Edits update every pillar and the decision report in this session.</p>
+          <AssumptionFields
+            value={tx.assumptions}
+            onChange={(assumptions) => updateTransaction(tx.id, (current) => ({ ...current, assumptions }))}
+            workforce={tx.workforce}
+            onWorkforceChange={(workforce) => updateTransaction(tx.id, (current) => ({ ...current, workforce }))}
+          />
+        </Panel>
       </div>
     </div>
   );
 }
 
-function Integrated({ view }: { view: View }) {
-  const items = [
-    ["Financial", view.integrated.financial, LineChart],
-    ["Accounting", view.integrated.accounting, Calculator],
-    ["Key audit risks", view.integrated.audit, ShieldCheck],
-    ["Sustainability", view.integrated.climate, Leaf],
-  ] as const;
-  return (
-    <Panel title="Integrated impact summary">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map(([l, t, Icon]) => (
-          <div key={l} className="rounded-xl border-l-2 border-primary bg-secondary p-4">
-            <p className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground"><Icon className="h-3.5 w-3.5 text-primary" />{l}</p>
-            <p className="tnum mt-2 text-sm">{t}</p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
+function pillarMetric(id: PillarId, view: View, tx: Transaction): string {
+  if (id === "financial") return aed(tx.amount);
+  if (id === "accounting") {
+    const first = view.financial.find((f) => /depreciation|amortisation|expense|opex/i.test(f.label));
+    return first?.value ?? (view.accounting.journals.length ? `${view.accounting.journals.length} journals` : "Review");
+  }
+  if (id === "audit") {
+    const flags = view.audit.exceptions.filter((e) => e.startsWith("Flag") || e.startsWith("Unresolved")).length;
+    return flags ? `${flags} review flag${flags > 1 ? "s" : ""}` : `${view.audit.items.length} risks`;
+  }
+  if (id === "sustainability") return view.sustainability.headline[0]?.value ?? "Not calculated";
+  const people = view.workforce ? occupationSupplyDemand(view.workforce.roles.map((r) => r.role)) : [];
+  const need = people.reduce((n, r) => n + (r.additionalRequired ?? 0), 0);
+  if (!people.length) return "Incomplete";
+  return `${need} people`;
 }
 
 export function JournalTable({ j }: { j: View["accounting"]["journals"][number] }) {
+  const t = journalTotals(j.lines);
   return (
-    <div>
-      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-gold">{j.label}</p>
+    <div className="overflow-hidden rounded-xl border border-border">
+      <p className="border-b border-border bg-secondary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
+        {j.label}
+      </p>
       <table className="w-full text-sm">
-        <thead><tr className="text-left text-xs opacity-70"><th className="py-1 font-medium">Account</th><th className="py-1 text-right font-medium">Dr</th><th className="py-1 text-right font-medium">Cr</th></tr></thead>
+        <thead>
+          <tr className="text-left text-[11px] text-muted-foreground">
+            <th className="px-3 py-1.5 font-medium">Account</th>
+            <th className="px-3 py-1.5 text-right font-medium">Debit</th>
+            <th className="px-3 py-1.5 text-right font-medium">Credit</th>
+          </tr>
+        </thead>
         <tbody>
           {j.lines.map((l) => (
             <tr key={l.account} className="border-t border-border">
-              <td className={`py-1.5 ${l.cr ? "pl-6" : ""}`}>{l.account}</td>
-              <td className="tnum py-1.5 text-right">{l.dr ? aed(l.dr) : ""}</td>
-              <td className="tnum py-1.5 text-right">{l.cr ? aed(l.cr) : ""}</td>
+              <td className={`px-3 py-1.5 ${l.cr ? "pl-8 text-muted-foreground" : "font-medium"}`}>{l.account}</td>
+              <td className="tnum px-3 py-1.5 text-right">{l.dr ? aed(l.dr) : "—"}</td>
+              <td className="tnum px-3 py-1.5 text-right">{l.cr ? aed(l.cr) : "—"}</td>
             </tr>
           ))}
+          <tr className="border-t border-gold/40 bg-secondary/30 text-xs">
+            <td className="px-3 py-1.5 font-medium">Totals</td>
+            <td className="tnum px-3 py-1.5 text-right">{aed(t.dr)}</td>
+            <td className="tnum px-3 py-1.5 text-right">{aed(t.cr)}</td>
+          </tr>
         </tbody>
       </table>
+      <p className={`px-3 py-1.5 text-[11px] ${t.balanced ? "text-primary" : "text-gold"}`}>
+        {t.balanced ? "Debits equal credits on this illustrative entry." : "Debits and credits do not match. Review the source amounts."}
+      </p>
     </div>
   );
 }
 
-function AccountingTab({ view }: { view: View }) {
+function AccountingTab({ view, tx }: { view: View; tx: Transaction }) {
   const a = view.accounting;
+  const ppe = tx.assumptions.kind === "ppe" ? calcPpe(tx.assumptions) : null;
   return (
     <div className="space-y-4">
-      <Panel title={a.standard}>
-        <ul className="space-y-2 text-sm">{a.points.map((p) => <li key={p} className="tnum flex gap-2"><span className="text-primary">•</span>{p}</li>)}</ul>
-      </Panel>
-      <Panel title="Illustrative journal entries">
-        <div className="grid gap-5 xl:grid-cols-3">{a.journals.map((j) => <JournalTable key={j.label} j={j} />)}</div>
-      </Panel>
-      <Panel title="Effects on financial statements">
-        <div className="grid gap-3 md:grid-cols-3">{a.statements.map((s) => (
-          <div key={s.statement} className="rounded-xl bg-secondary p-4"><p className="text-sm font-medium">{s.statement}</p><p className="tnum mt-1 text-sm text-muted-foreground">{s.effect}</p></div>
-        ))}</div>
-      </Panel>
-      <p className="text-xs text-muted-foreground">Actual treatment depends on the applicable accounting framework, entity policies and transaction facts.</p>
+      <p className="text-sm text-muted-foreground">{a.standard}</p>
+      {a.journals.length > 0 ? (
+        <div className="grid gap-4 xl:grid-cols-2">{a.journals.map((j) => <JournalTable key={j.label} j={j} />)}</div>
+      ) : (
+        <Panel>
+          <p className="text-sm text-muted-foreground">
+            Journals are not auto-posted for this investment type. Split the envelope into contracts before recognising assets.
+          </p>
+        </Panel>
+      )}
+      {ppe && ppe.schedule.length > 0 && (
+        <Panel title="Carrying value (illustrative)">
+          <div className="h-56">
+            <ResponsiveContainer>
+              <BarChart data={ppe.schedule}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="year" stroke="var(--muted-foreground)" tickFormatter={(y) => `Y${y}`} />
+                <YAxis stroke="var(--muted-foreground)" tickFormatter={tickAed} />
+                <Tooltip {...chartTip} />
+                <Bar dataKey="closing" name="Carrying amount" fill="var(--gold)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="dep" name="Depreciation (non-cash)" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      )}
+      <div className="grid gap-3 md:grid-cols-3">
+        {a.statements.map((s) => (
+          <div key={s.statement} className="rounded-xl border border-border bg-secondary/40 p-4">
+            <p className="text-xs font-medium text-gold">{s.statement}</p>
+            <p className="tnum mt-1 text-sm">{s.effect}</p>
+          </div>
+        ))}
+      </div>
+      <DetailsBlock title="Recognition notes and methodology">
+        <ul className="space-y-2">
+          {a.points.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs">Actual treatment depends on the applicable accounting framework, entity policies and facts.</p>
+      </DetailsBlock>
     </div>
   );
 }
 
-function FinancialTab({ view, txId }: { view: View; txId: TxId }) {
-  const { vehicle, building } = useGL();
+function FinancialTab({ view, tx }: { view: View; tx: Transaction }) {
+  const ppe = tx.assumptions.kind === "ppe" ? calcPpe(tx.assumptions) : null;
+  const eff = tx.assumptions.kind === "efficiency" ? calcEfficiency(tx.assumptions) : null;
+  const life = tx.assumptions.kind === "ppe" ? tx.assumptions.usefulLife : null;
+  const tcoMax = ppe?.tcoGross ?? tx.amount;
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -209,40 +335,60 @@ function FinancialTab({ view, txId }: { view: View; txId: TxId }) {
           </div>
         ))}
       </div>
-      {txId === "vehicles" ? (
-        <Panel title="Carrying amount and annual cash operating cost">
-          <div className="h-72">
+      {ppe && ppe.tcoGross != null && tx.assumptions.kind === "ppe" && (
+        <Panel title="Investment versus recurring cash (illustrative TCO)">
+          <div className="space-y-3">
+            <CompareBar label="Acquisition (cash, year 0)" value={tx.assumptions.purchaseCost} max={tcoMax} bar="bg-gold" display={aed(tx.assumptions.purchaseCost)} />
+            {ppe.annualOpex != null && life != null && (
+              <CompareBar label="Lifetime cash operating cost" value={ppe.annualOpex * life} max={tcoMax} bar="bg-teal" display={aed(ppe.annualOpex * life)} />
+            )}
+            <CompareBar label="TCO gross" value={ppe.tcoGross} max={tcoMax} bar="bg-primary" display={aed(ppe.tcoGross)} />
+            {ppe.tcoNet != null && (
+              <CompareBar
+                label="TCO net of residual (end-of-life assumption)"
+                value={ppe.tcoNet}
+                max={tcoMax}
+                bar="bg-sand"
+                display={aed(ppe.tcoNet)}
+              />
+            )}
+          </div>
+        </Panel>
+      )}
+      {ppe?.schedule && ppe.schedule.length > 0 && (
+        <Panel title="Multi-year carrying amount and cash opex">
+          <div className="h-64">
             <ResponsiveContainer>
-              <BarChart data={calcVehicle(vehicle).schedule}>
+              <BarChart data={ppe.schedule}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="year" stroke="var(--muted-foreground)" tickFormatter={(y) => `Y${y}`} />
                 <YAxis stroke="var(--muted-foreground)" tickFormatter={tickAed} />
                 <Tooltip {...chartTip} />
                 <Bar dataKey="closing" name="Closing carrying amount" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="dep" name="Depreciation (non-cash)" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="opex" name="Cash opex" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="opex" name="Cash opex" fill="var(--gold)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Panel>
-      ) : (
-        <Panel title="Cumulative net cash position and carrying amount">
-          <div className="h-72">
+      )}
+      {eff?.cumulative && eff.cumulative.length > 0 && (
+        <Panel title="Cumulative net cash and carrying amount">
+          <div className="h-64">
             <ResponsiveContainer>
-              <RLineChart data={calcBuilding(building).cumulative}>
+              <RLineChart data={eff.cumulative}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="year" stroke="var(--muted-foreground)" tickFormatter={(y) => `Y${y}`} />
                 <YAxis stroke="var(--muted-foreground)" tickFormatter={tickAed} />
                 <Tooltip {...chartTip} />
                 <ReferenceLine y={0} stroke="var(--gold)" strokeDasharray="4 4" />
-                <Line dataKey="cumulative" name="Cumulative net savings" stroke="var(--chart-1)" strokeWidth={2.5} dot={false} />
-                <Line dataKey="carrying" name="Carrying amount" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
+                <Line dataKey="cumulative" name="Cumulative net savings (forecast)" stroke="var(--chart-1)" strokeWidth={2.5} dot={false} />
+                <Line dataKey="carrying" name="Carrying amount" stroke="var(--gold)" strokeWidth={2} dot={false} />
               </RLineChart>
             </ResponsiveContainer>
           </div>
         </Panel>
       )}
-      <p className="text-xs text-muted-foreground">Depreciation is shown as a non-cash expense and is excluded from cash flow totals. Figures are illustrative.</p>
+      <p className="text-xs text-muted-foreground">Depreciation is non-cash where an asset model applies. Forecast benefits are not realised results.</p>
     </div>
   );
 }
@@ -250,45 +396,118 @@ function FinancialTab({ view, txId }: { view: View; txId: TxId }) {
 function AuditTab({ view }: { view: View }) {
   return (
     <div className="space-y-4">
-      <Panel title="Risks and suggested procedures">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground"><tr><th className="py-2 pr-4 font-medium">Risk</th><th className="py-2 pr-4 font-medium">Control test</th><th className="py-2 font-medium">Substantive procedure</th></tr></thead>
-            <tbody>{view.audit.items.map((a) => (
-              <tr key={a.risk} className="border-t border-border align-top">
-                <td className="py-2.5 pr-4 font-medium">{a.risk}</td>
-                <td className="py-2.5 pr-4 text-muted-foreground">{a.control}</td>
-                <td className="tnum py-2.5 text-muted-foreground">{a.substantive}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      </Panel>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Identified exceptions"><ul className="space-y-2 text-sm">{view.audit.exceptions.map((e) => <li key={e} className="flex gap-2"><span className="text-gold">!</span>{e}</li>)}</ul></Panel>
-        <Panel title="Recommended actions"><ul className="space-y-2 text-sm">{view.audit.actions.map((e) => <li key={e} className="flex gap-2"><span className="text-primary">→</span>{e}</li>)}</ul></Panel>
+      <div className="grid gap-3 md:grid-cols-2">
+        {view.audit.exceptions.map((e) => {
+          const flag = e.startsWith("Flag") || e.startsWith("Unresolved");
+          return (
+            <div key={e} className={`rounded-xl border p-4 ${flag ? "border-gold/50 bg-gold/5" : "border-border bg-card"}`}>
+              <p className="text-[10px] uppercase tracking-wider text-gold">{flag ? "Review item" : "Status"}</p>
+              <p className="mt-1 text-sm">{e}</p>
+            </div>
+          );
+        })}
       </div>
+      <div className="space-y-3">
+        {view.audit.items.map((a) => (
+          <div key={a.risk} className="rounded-xl border border-border bg-card p-4">
+            <p className="font-medium">{a.risk}</p>
+            <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-sand">Control test</p>
+                <p className="mt-1 text-muted-foreground">{a.control}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-teal">Substantive procedure</p>
+                <p className="tnum mt-1 text-muted-foreground">{a.substantive}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Panel title="Actions">
+        <ul className="space-y-2 text-sm">
+          {view.audit.actions.map((e) => (
+            <li key={e} className="flex gap-2">
+              <span className="text-primary">→</span>
+              {e}
+            </li>
+          ))}
+        </ul>
+      </Panel>
       <p className="text-xs text-muted-foreground">Suggested procedures only. No audit has been performed and no fraud is implied.</p>
     </div>
   );
 }
 
-function SustainTab({ view }: { view: View }) {
+function SustainTab({ view, tx }: { view: View; tx: Transaction }) {
   const s = view.sustainability;
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <EsgGauge tx={tx} />
+      {s.notice && (
+        <p className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-foreground">{s.notice}</p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
         {s.headline.map((h) => (
-          <div key={h.label} className="rounded-2xl border border-border bg-card p-4">
-            <p className="text-xs text-muted-foreground">{h.label}</p><p className="tnum mt-1 text-lg text-primary">{h.value}</p><p className="mt-1 text-[11px] text-gold">Estimate</p>
+          <div key={h.label} className="rounded-2xl border border-primary/30 bg-card p-4">
+            <p className="text-xs text-muted-foreground">{h.label}</p>
+            <p className="tnum mt-1 text-2xl font-medium text-primary">{h.value}</p>
+            <p className="mt-1 text-[11px] text-gold">{h.hint ?? "Estimate · not measured"}</p>
           </div>
         ))}
       </div>
-      <Panel title="Calculation method"><ul className="tnum space-y-2 text-sm">{s.method.map((x) => <li key={x}>{x}</li>)}</ul></Panel>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Reporting context (IFRS S1 / S2)"><ul className="space-y-2 text-sm">{s.reporting.map((x) => <li key={x}>{x}</li>)}</ul></Panel>
-        <Panel title="Data limitations"><ul className="space-y-2 text-sm text-muted-foreground">{s.limitations.map((x) => <li key={x}>{x}</li>)}</ul></Panel>
+      <DetailsBlock title="Method, reporting context and limitations">
+        <ul className="space-y-2">
+          {[...s.method, ...s.reporting, ...s.limitations].map((x) => (
+            <li key={x}>{x}</li>
+          ))}
+        </ul>
+      </DetailsBlock>
+    </div>
+  );
+}
+
+function WorkforceTab({ view }: { view: View }) {
+  const w = view.workforce;
+  if (!w || w.roles.length === 0) {
+    return (
+      <Panel title="Workforce readiness">
+        <p className="text-sm">{w?.headline ?? "Workforce assessment unavailable."}</p>
+        <p className="mt-3 text-xs text-muted-foreground">{WORKFORCE_DISCLOSURE}</p>
+      </Panel>
+    );
+  }
+  const rows = occupationSupplyDemand(w.roles.map((r) => r.role));
+  const required = rows.reduce((n, r) => n + (r.additionalRequired ?? 0), 0);
+  return (
+    <div className="space-y-4">
+      <p className="text-base font-medium">{w.headline}</p>
+      <div className="rounded-xl border border-border bg-card p-4 sm:max-w-xs">
+        <p className="text-xs text-muted-foreground">Additional people required</p>
+        <p className="tnum mt-1 text-lg">{required}</p>
       </div>
+      <Panel title="Occupation staffing plan">
+        <OccupationsTable roles={w.roles.map((r) => r.role)} />
+      </Panel>
+      <Panel title="Suggested next steps">
+        <ul className="space-y-2 text-sm">
+          {w.recommendations.map((r) => (
+            <li key={r} className="flex gap-2">
+              <span className="text-primary">→</span>
+              {r}
+            </li>
+          ))}
+        </ul>
+      </Panel>
+      {(w.missing.length > 0 || w.issues.length > 0) && (
+        <DetailsBlock title="Missing inputs and issues">
+          <ul className="space-y-1">
+            {[...w.missing, ...w.issues].map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </DetailsBlock>
+      )}
     </div>
   );
 }

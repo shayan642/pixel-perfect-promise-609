@@ -14,4 +14,10 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
   });
+
+  it("matches /create and /transactions", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+    expect(router.matchRoutes("/create").at(-1)?.routeId).toBe("/create");
+    expect(router.matchRoutes("/transactions").at(-1)?.routeId).toBe("/transactions");
+  });
 });

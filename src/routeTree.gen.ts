@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CreateRouteImport } from './routes/create'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as AnalysisTxIdRouteImport } from './routes/analysis.$txId'
 import { Route as ReportTxIdRouteImport } from './routes/report.$txId'
@@ -17,6 +18,11 @@ import { Route as ReportTxIdRouteImport } from './routes/report.$txId'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreateRoute = CreateRouteImport.update({
+  id: '/create',
+  path: '/create',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TransactionsRoute = TransactionsRouteImport.update({
@@ -37,12 +43,14 @@ const ReportTxIdRoute = ReportTxIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/create': typeof CreateRoute
   '/transactions': typeof TransactionsRoute
   '/analysis/$txId': typeof AnalysisTxIdRoute
   '/report/$txId': typeof ReportTxIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/create': typeof CreateRoute
   '/transactions': typeof TransactionsRoute
   '/analysis/$txId': typeof AnalysisTxIdRoute
   '/report/$txId': typeof ReportTxIdRoute
@@ -50,20 +58,29 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/create': typeof CreateRoute
   '/transactions': typeof TransactionsRoute
   '/analysis/$txId': typeof AnalysisTxIdRoute
   '/report/$txId': typeof ReportTxIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/transactions' | '/analysis/$txId' | '/report/$txId'
+  fullPaths:
+    '/' | '/create' | '/transactions' | '/analysis/$txId' | '/report/$txId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/transactions' | '/analysis/$txId' | '/report/$txId'
-  id: '__root__' | '/' | '/transactions' | '/analysis/$txId' | '/report/$txId'
+  to: '/' | '/create' | '/transactions' | '/analysis/$txId' | '/report/$txId'
+  id:
+    | '__root__'
+    | '/'
+    | '/create'
+    | '/transactions'
+    | '/analysis/$txId'
+    | '/report/$txId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CreateRoute: typeof CreateRoute
   TransactionsRoute: typeof TransactionsRoute
   AnalysisTxIdRoute: typeof AnalysisTxIdRoute
   ReportTxIdRoute: typeof ReportTxIdRoute
@@ -76,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/create': {
+      id: '/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof CreateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/transactions': {
@@ -104,6 +128,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CreateRoute: CreateRoute,
   TransactionsRoute: TransactionsRoute,
   AnalysisTxIdRoute: AnalysisTxIdRoute,
   ReportTxIdRoute: ReportTxIdRoute,

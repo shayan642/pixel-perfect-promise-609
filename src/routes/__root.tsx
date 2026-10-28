@@ -80,13 +80,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "GreenLedger AI — Connected Financial Intelligence" },
-      { name: "description", content: "One transaction. Four perspectives. Better decisions." },
-      { property: "og:title", content: "GreenLedger AI" },
-      { property: "og:description", content: "One transaction. Four perspectives. Better decisions." },
+      { title: "MIZAN AI | Intelligence with Integration" },
+      { name: "description", content: "AI Investment Intelligence · Financial Governance · Sustainability." },
+      { property: "og:title", content: "MIZAN AI (ميزان)" },
+      { property: "og:description", content: "Intelligence with Integration." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -94,7 +93,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@500;600;700&display=swap" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Sora:wght@500;600;700&display=swap" },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
